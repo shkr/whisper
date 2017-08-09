@@ -1,0 +1,14 @@
+{
+	"web3": {
+		"host": "http://127.0.0.1",
+		"port": 8545
+	},
+	"ipfs": {
+		"host": "127.0.0.1",
+		"api_port": 5001
+	},
+	"whisper": {
+		"buy_url": "http://127.0.0.1:9090/buy",
+		"sell_url": "http://127.0.0.1:9090/sell"
+	}
+}
