@@ -1,0 +1,23 @@
+geth --datadir="./" account new
+read -r -d '' GEN_BLOCK <<- EOM
+{
+    "config": {
+        "chainID"       : 10,
+        "homesteadBlock": 0,
+        "eip155Block":    0,
+        "eip158Block":    0
+    },
+    "nonce": "0x$((RANDOM))",
+    "difficulty": "0x20000",
+    "mixhash": "0x00000000000000000000000000000000000000647572616c65787365646c6578",
+    "coinbase": "0x0000000000000000000000000000000000000000",
+    "timestamp": "0x00",
+    "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "extraData": "0x00",
+    "gasLimit": "0x2FEFD8",
+    "alloc": {
+    }
+}
+EOM
+echo "$GEN_BLOCK" > ./genesisblock.json
+geth --datadir="./" init genesisblock.json
