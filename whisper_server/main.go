@@ -45,7 +45,7 @@ var sh *shell.Shell
 var dirPath string
 
 func homePage(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Welcome to ipwhisp")
+	fmt.Fprintf(w, "Welcome to whisper")
 }
 
 type ClientConfig struct {
@@ -65,9 +65,8 @@ type Whisper struct {
 }
 
 func encode(b []byte) string {
-  return base64.StdEncoding.EncodeToString(b)
+	return base64.StdEncoding.EncodeToString(b)
 }
-
 
 func requestSecretStorage(w http.ResponseWriter, r *http.Request) {
 
@@ -83,8 +82,21 @@ func requestSecretStorage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, encode(encryptedHashAddress))
 }
 
+func requestInventoryItems(dirPath string, w http.ResponseWriter, r *http.Request) {
+	inventoryItems, _ := json.Marshal(inventoryItems(dirPath))
+	fmt.Fprintf(w, string(inventoryItems))
+}
 
-func storeSecret(whisperObject Whisper) ([] byte, error) {
+func inventoryItems(dirPath string) []string {
+	files, _ := ioutil.ReadDir(dirPath)
+	var filePaths []string
+	for _, f := range files {
+		filePaths = append(filePaths, f.Name())
+	}
+	return filePaths
+}
+
+func storeSecret(whisperObject Whisper) ([]byte, error) {
 
 	// transform filePath to local client side address
 	filePath := fmt.Sprintf("%s/%s", dirPath, whisperObject.FileName)
@@ -108,8 +120,8 @@ func storeSecret(whisperObject Whisper) ([] byte, error) {
 	hashAddress, err := sh.Add(f)
 	if err != nil {
 		panic(err)
-	}	
-	
+	}
+
 	encryptedHashAddress, err := RsaEncrypt([]byte(hashAddress), whisperObject.PublicKey)
 
 	return encryptedHashAddress, err
@@ -172,12 +184,21 @@ func main() {
 		mux.HandleFunc("/", homePage)
 
 		/**
+		 * GET /inventory
+		 *
+		 * All the files in the inventory are returned
+		 */
+		mux.HandleFunc("/inventory", func(w http.ResponseWriter, r *http.Request) {
+			requestInventoryItems(dirPath, w, r)
+		})
+
+		/**
 		 * POST /buy
 		 *
 		 * All buy requests will come through the /buy route
 		 * Each request should have a public key and a fileName value
 		 */
-		mux.HandleFunc("/buy", requestSecretStorage)
+		mux.HandleFunc("/sell", requestSecretStorage)
 
 		// cors.Default() setup the middleware with default options being
 		// all origins accepted with simple methods (GET, POST). See
@@ -193,9 +214,9 @@ func main() {
 
 	// commands
 	app.Commands = []cli.Command{
-		cli.Command {
+		cli.Command{
 			Name:   "server",
-			Usage:  "start whisper server",
+			Usage:  "whisper server",
 			Action: serverFn,
 			Before: func(c *cli.Context) error {
 				fmt.Fprintf(c.App.Writer, "server started on http://localhost:9090\n")

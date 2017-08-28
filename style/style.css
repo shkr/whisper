@@ -8,9 +8,9 @@ table#AppConfigurationTable {
     background-color: #f1f1c1;
 }
 
-table#InventoryListTable {
+table#InventoryTable {
     width: 100%; 
-    background-color: green;
+    background-color: #7FFFD4;
 }
 
 #progress_bar {

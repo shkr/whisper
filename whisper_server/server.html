@@ -3,40 +3,88 @@
 
 <head>
     <title>Whisper Application</title>
-    <link rel="stylesheet" type="text/css" href="./style/style.css" />
-    <script type="text/javascript" src="./web3/web3.min.js"></script>
-    <script type="text/javascript" src="./rsa/jsencrypt.js"></script>
+    <link rel="stylesheet" type="text/css" href="../style/style.css" />
+    <script type="text/javascript" src="../js/web3.min.js"></script>
+    <script type="text/javascript" src="../js/ipfs.js"></script>
+    <script type="text/javascript" src="../js/jsencrypt.js"></script>
     <script type="text/javascript">
+
+
+    String.prototype.format = function() {
+      a = this;
+      for (k in arguments) {
+        a = a.replace("{" + k + "}", arguments[k])
+      }
+      return a;
+    };
 
     /* create application namespace */
     let App = {}
+    App.conf = {}
 
     /* configuration initialization */
-    App.web3Host; // 'http://localhost';
-    App.web3Port; // '8545';
-    App.whisperUrl; // "/whisper"
-
-    /* crypto intialization */
-    App.publicKey;
-    App.privateKey;
-    App.fileReceived = new Set();
-    App.fileSent = new Set();
-    App.decrypt = new JSEncrypt();
+    App.conf.web3Host;
+    App.conf.web3Port;
+    App.conf.ipfsHost;
+    App.conf.ipfsAPIPort;
+    App.conf.whisperInventoryUrl;
+    App.conf.whisperSellUrl;    
     
+    /* ipfs initialization */
+    let ipfs;
+    App.ipfs = ipfs;
 
     /* web3 initialization */
     let Web3 = require('web3');
     App.web3 = new Web3();
-    web3.setProvider(new web3.providers.HttpProvider(web3Host + ':' + web3Port));
-    if (!web3.isConnected()) {
-        console.error("Ethereum - no connection to RPC server");
-    } else {
-        console.log("Ethereum - connected to RPC server");
+    
+    /* HTML Tables */
+    /* 1 configuration html table */
+    App.html = new Object();
+    App.html.tableRowInsertOrReplace = new Object()
+
+    App.html.appConfigurationTable = 'AppConfigurationTable';
+    App.html.htmlConfData = new Object();
+    App.html.htmlConfRowID = -1;
+    App.html.tableRowInsertOrReplace[App.html.appConfigurationTable] = function (key, value) {
+        if(!App.html.htmlConfData.hasOwnProperty(key)) {
+            App.html.htmlConfRowID += 1;
+            App.html.htmlConfData[key] = App.html.htmlConfRowID;
+            let htmlTable = document.getElementById(App.html.appConfigurationTable)
+            row = htmlTable.insertRow(App.html.htmlConfData[key]);
+            row.insertCell(0).innerHTML = key;
+            row.insertCell(1).innerHTML = value;
+        } else {
+            let rows = document.getElementById(App.html.appConfigurationTable).rows
+            let row = rows[App.html.htmlConfData[key]]
+            row.cells[0].innerHTML = key;
+            row.cells[1].innerHTML = value;
+        }
     }
-    App.account = web3.eth.accounts[0];
+
+    /* 2 files bought html table */
+    App.html.inventoryTable = 'InventoryTable';
+    App.html.htmlInventoryData = new Object();
+    App.html.htmlInventoryRowID = -1;
+    App.html.tableRowInsertOrReplace[App.html.inventoryTable] = function (key, value) {
+        console.log(key, value);
+        if(!App.html.htmlInventoryData.hasOwnProperty(key)) {
+            App.html.htmlInventoryRowID += 1;
+            App.html.htmlInventoryData[key] = App.html.htmlInventoryRowID
+            let htmlTable = document.getElementById(App.html.inventoryTable)
+            row = htmlTable.insertRow(App.html.htmlInventoryData[key]);
+            row.insertCell(0).innerHTML = key;
+            row.insertCell(1).innerHTML = value;
+        } else {
+            let rows = document.getElementById(App.html.inventoryTable).rows
+            let row = rows[App.html.htmlInventoryData[key]]
+            row.cells[0].innerHTML = key;
+            row.cells[1].innerHTML = value;
+        }
+    };
     
     /**
-     * Check for the letious File API support.
+     * Check for the File API support.
      */
     function checkFileAPI() {
         if (window.File && window.FileReader && window.FileList && window.Blob) {
@@ -66,132 +114,165 @@
         }
     }
 
+
+    function connectToSmartContract(address) {
+        if(address == null) {
+            address = document.getElementById("contractAddress").value;
+        }
+        App.contractInstance = App.Contract.at(address);
+        App.contractAddress = address;
+        let key1 = 'Contract Address';
+        let value1 = address;
+        console.log("Connected Contract at: ", address);
+        App.html.tableRowInsertOrReplace[App.html.appConfigurationTable](key1, value1);
+
+        App.html.tableRowInsertOrReplace[App.html.appConfigurationTable]("Contract requires file: ",
+                             App.contractInstance.fileType());
+        App.html.tableRowInsertOrReplace[App.html.appConfigurationTable]("Contract requires quota: ",
+                             App.contractInstance.quota());
+        // Set Inventory list
+        setInventory();
+    }
+
+    /**
+     * load SmartContractInterface
+     */
+    function loadSmartContractInterface(filePath) {
+        readText(filePath, function load(txt) { 
+
+            let data = JSON.parse(txt);
+            App.contractData = data;
+            App.Contract = App.web3.eth.contract(App.contractData.abi);
+            let key1 = 'Contract Name';
+            let value1 = App.contractData.contract_name;
+            App.html.tableRowInsertOrReplace[App.html.appConfigurationTable](key1, value1);
+            console.log("Contract Interface loaded: ", App.contractData.contract_name);            
+        });
+    }
+
     /**
      * set App.config
      */
     function setAppConfig(filePath) {
-        readText(filePath, function setKeys(data) { 
-            let jsonData = data
-            App.web3Host = jsonData.eth.host; // 'http://localhost';
-            App.web3Port = sonData.eth.port; // '8545';
-            App.whisperUrl = jsonData.whisper; // "/whisper"
+        readText(filePath, function load(txt) { 
+            
+            let data = JSON.parse(txt)
+            
+            App.conf.web3Host = data.web3.host; // 'http://localhost';
+            App.conf.web3Port = data.web3.port; // '8545';
+            App.conf.ipfsHost = data.ipfs.host;
+            App.conf.ipfsAPIPort = data.ipfs.api_port;
+            App.conf.whisperSellUrl = data.whisper.sell_url;
+            App.conf.whisperInventoryUrl = data.whisper.inventory_url;
+            App.web3.setProvider(new App.web3.providers.HttpProvider(App.conf.web3Host + ':' + App.conf.web3Port));
+            if (!App.web3.isConnected()) {
+                console.error("Ethereum - no connection to RPC server");
+            } else {
+                console.log("Ethereum - connected to RPC server");
+            }
+            App.account = App.web3.eth.accounts[0];
+
+            /* IPFS initialization */
+            App.ipfs = IpfsApi(App.conf.ipfsHost, App.conf.ipfsAPIPort)
+            
+            let key1 = 'Ethereum Provider';
+            let value1 = App.conf.web3Host + ':' + App.conf.web3Port;
+            App.html.tableRowInsertOrReplace[App.html.appConfigurationTable](key1, value1);
+            
+
+            let key2 = 'IPFS Node'
+            let value2 = App.conf.ipfsHost + ':' + App.conf.ipfsAPIPort
+            App.html.tableRowInsertOrReplace[App.html.appConfigurationTable](key2, value2);
         });
     }
-
     
-    /**
-     * set App.privateKey
-     */
-    function setPrivateKey(filePath) {
-        readText(filePath, function setPk(data) { 
-            App.privateKey = data;
-            decrypt.setPrivateKey(App.privateKey);
-        });        
+    function setInventory() {
+
+        // http request object
+        let http = new XMLHttpRequest();
+        http.open("GET", App.conf.whisperInventoryUrl);
+        http.setRequestHeader("Content-Type", "application/json;charset=UTF-8");        
+        //Call this function when the state changes
+        http.onreadystatechange = function() {
+            if(http.readyState == 4 && http.status == 200) {
+                let inventoryList = JSON.parse(http.responseText);
+
+                // console output
+                console.log('server returned : ' + inventoryList);
+                for (var i = 0; i < inventoryList.length; i++) {
+                    App.html.tableRowInsertOrReplace[App.html.inventoryTable](inventoryList[i], '<input type = "button" value = "send" fileName="{0}" onclick = "encryptFileAndSendUrl(this)"/>'.format(inventoryList[i]));
+                }
+                
+
+
+                alert('Total ' + inventoryList.length + ' file (s) in inventory');
+            }
+        };
+        http.send(null);
     }
 
     /**
      * whisper after contract is fulfilled
      */
-    function whisperToClient(fileName) {
+    function encryptFileAndSendUrl(fileName) {
+
+        if(fileName.type=="button") {
+            fileName = fileName.getAttribute('filename');
+        }
 
         // http request object
         let http = new XMLHttpRequest();
-        http.open("POST", whisperUrl);
+        http.open("POST", App.conf.whisperSellUrl);
         http.setRequestHeader("Content-Type", "application/json;charset=UTF-8");        
         //Call this function when the state changes
         http.onreadystatechange = function() {
             if(http.readyState == 4 && http.status == 200) {
-                let encryptedFileName = http.responseText;
-                let uncrypted = decrypt.decrypt(encryptedFileName);
-                App.fileReceived.add(uncrypted);
-                alert(App.fileReceived.size + " file (s) retrieved");
+                let ipfsEncryptedFileUrl = http.responseText;
+                App.debugValue = fileName;
+                // console output
+                console.log('server returned : ' + ipfsEncryptedFileUrl);
+                message = {
+                    "from": App.web3.eth.accounts[1], 
+                    "gas": 3000000
+                };
+                App.contractInstance.sellItem(ipfsEncryptedFileUrl, message, function (err, res) {
+                    if (err) {
+                        console.error("sell item error: ", err);
+                    } else {
+                        App.html.tableRowInsertOrReplace[App.html.inventoryTable](fileName, '<input type = "button" value = "sent" onclick = "encryptFileAndSendUrl(this)" disabled/>');
+                    }
+                });
             }
         }
 
         let whisperObject = {}
-        whisperObject.PublicKey = publicKey
-        whisperObject.FileName = fileName
+        whisperObject.PublicKey = App.contractInstance.publicKey().toString();
+        whisperObject.FileName = fileName;
         http.send(JSON.stringify(whisperObject));
     }
 
-
-    /* smart contract interface */
-    App.contractInterface = [{
-        "constant": false,
-        "inputs": [{
-            "name": "public_key",
-            "type": "string"
-        }, {
-            "name": "eth",
-            "type": "int"
-        }],
-        "name": "request",
-        "outputs": [{
-            "name": "address",
-            "type": "string"
-        }],
-        "type": "function"
-    }];
-
-    
-    App.contract = App.web3.eth.contract(contractInterface);
-    App.contractObject = {
-        from: account,
-        gas: 300000,
-        data: '0xcontractinbytes',
-    };
-
-    /** 
-      * Publish a new contract this has to be done using the go client
-      **/
-    function publishContract() {
-
-        window.currentData = null;
-
-        if (window.contractInstance) {
-            console.error('Contract already been deployed at: ', window.contractAddress);
-            return;
-        }
-
-        window.contract.new(window.contractObject, function (err, contract) {
-            if (err) {
-                console.error("Contract deployment error: ", err);
-            } else if (contract.address) {
-                window.contractAddress = contract.address;
-                window.contractInstance = window.contract.at(contract.address);
-                console.log("Contract successfully deployed at: ", contract.address);
-            } else if (contract.transactionHash) {
-                console.log("Awaiting contract deployment with transaction hash: ", contract.transactionHash);
-            } else {
-                console.error("Unresolved contract deployment error");
-            }
-        });
-    }
-
     /**
-      * View the purchased files
-      **/
-    function viewDataSent(fileName) {
-        
-        if (!window.contractInstance) {
-            console.error("Storage contract has not been deployed");
-            return;
+     * whisper after contract is fulfilled
+     */
+    function checkWhisper(fileName) {
+        if(fileName == null) {
+            fileName = document.getElementById("inventoryFileName").value;
         }
+        hash = App.fileReceived[fileName];
+        App.ipfs.cat(hash, function (err, stream) {
+          let res = '';
 
-        window.contractInstance.get.call(function (err, result) {
-            if (err) {
-                console.error("Content fetch error:", err);
-            } else if (result && window.IPFSHash == result) {
-                console.log("New data is not mined yet. Current data: ", result);
-                return;
-            } else if (result) {
-                window.IPFSHash = result;
-                let URL = window.ipfsAddress + "/" + result;
-                console.log("Content successfully retrieved. IPFS address", result);
-                console.log("Content URL:", URL);
-            } else {
-                console.error('No data, verify the transaction has been mined');
-            }
+          stream.on('data', function (chunk) {
+            res += chunk.toString();
+          });
+
+          stream.on('error', function (err) {
+            console.error('checkWhisper: ', err);    
+          });
+
+          stream.on('end', function () {
+            document.getElementById("whisperOutputStr").innerText = App.crypto.decrypt(res);
+          });
         });
     }
 
@@ -202,6 +283,7 @@
         let status = {}
         status.balance = getBalance()
         status.gasprice = App.web3.eth.gasPrice
+        return status
     }
 
     /**
@@ -211,6 +293,7 @@
         let status = {}
         status.filesReceived = App.fileReceived
         status.filesSent = App.fileSent
+        return status
     }
 
 
@@ -228,70 +311,31 @@
 
 <body>
     <br/>
-    <h2>whisper web application</h2>
+    <h2>Whisper Server</h2>
+    <fieldset>
+        <strong>App configuration</strong>: 
+        <input type="file" name="appConfig" onchange='setAppConfig(this)' />
+        <strong>Smart Contract</strong>: 
+        <input type="file" name="smartContract" onchange='loadSmartContractInterface(this)' /> 
+        <strong>Contract Address</strong>: 
+        <input type = "text" id="contractAddress"/>
+        <input type = "button" value = "connect" onclick = "connectToSmartContract()"/>
+        
+    <table id="AppConfigurationTable"></table>
 
-    <hr/>
-    <br/>
-
-    <p>Configuration files:</p>
-    <p>
-    <strong>App configuration</strong>: 
-    <input type="file" name="appConfig" onchange='setPublicKey(this)' />
-    </p>
-    <p>
-    <strong>Public Key</strong>: 
-    <input type="file" name="publicKey" onchange='setPublicKey(this)' />
-    </p>
-    <p>
-    <strong>Private Key</strong>: 
-    <input type="file" name="privateKey" onchange='setPrivateKey(this)' />
-    </p>
-
-    <p> Ethereum Info </p>
-
-    <p> IPFS Info </p>
-
-    <p> Whisper Info </p>
-
-    <p> Publish files </p>
-
-    <ol>
-        <li><code>publishContract()</code>: Deploy the whisper contract to your Ethereum blockchain. The geth client will show it received the deployment transaction, return a transaction hash to the console, and print out the contract transaction address after successful deployment.</li>
-        <br/>
-    </ol>
-
-    <p>Purchase files:</p>
-
-    <ol>
-        <li><code>buyData(filePath, eth)</code>: buy the file at the location with [eth] coins.</li>
-        <br/>
-    </ol>
-
-    <br/>
-
-    <hr/>
-    <br/>
-
-    <br />
-
-    <p>Here is a concrete example. Let's say we want to upload an image of the <a href="https://ethereum.org/images/wallpaper-homestead.jpg">Ethereum Homestead wallpaper</a>. For example purposes, my IPFS hash address for this wallpaper resolves to "QmPJLNMiAp3QoCKdGAgzshNRbQiZ8wQmyjYkcUHJZzQ19u". Then we have all the pieces to run the storage application.</p>
-
-    <p>Run the commands:</p>
-    <ol>
-        <li>geth --datadir="./ethdata/" account new</li>
-        <li>
-        <li><code>deployStorage()</code></li>
-        <li><code>storeContent("https://ethereum.org/images/wallpaper-homestead.jpg")</code></li>
-        <li><code>storeAddress("QmPJLNMiAp3QoCKdGAgzshNRbQiZ8wQmyjYkcUHJZzQ19u")</code></li>
-        <li><code>fetchContent()</code></li>
-    </ol>
-
-    <p>This process will then return: "http://localhost:8080/ipfs/QmPJLNMiAp3QoCKdGAgzshNRbQiZ8wQmyjYkcUHJZzQ19u"</p>
-
-    <br/>
-    <hr/>
-    <br/>
-
-    <br/>
-    <hr/>
+    <br>
+    <br>
+    <h2>Inventory</h2>
+    <table id="InventoryTable"></table>
+    <br>
+    <br>
+    <h2>Transactions</h2>
+    <fieldset>
+      <label>Decrypt file: </label>
+      <input type = "text" id = "inventoryFileName" />
+      <input type = "button" value = "decrypt" onclick = "checkWhisper()"/>
+      <p><strong><output id="whisperOutputStr">None</output></strong></p>
+    </fieldset>
+    </fieldset>
+    
 </body>

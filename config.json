@@ -9,6 +9,7 @@
 	},
 	"whisper": {
 		"buy_url": "http://127.0.0.1:9090/buy",
-		"sell_url": "http://127.0.0.1:9090/sell"
+		"sell_url": "http://127.0.0.1:9090/sell",
+		"inventory_url": "http://127.0.0.1:9090/inventory"
 	}
 }
