@@ -9,11 +9,15 @@ Whisper provides server client functionality for both generating eth based contr
 
 The documentation outlines the package dependencies, basic server/client functionalities, and a how-to on integrating it with existing systems. 
 
+---
+
+
 ### Whisper-Server
 
 This [repository](https://github.com/shkr/whisper/tree/master/whisper_server) contains the Whisper server daemon which handles the file, encryption and transmission through ipfs, and the Web UI. 
 
 Built in GO, the server leverages a local ipfs daemon, provides file searching, hashing and encryption, and a command line interface for easy deployment. If you are looking for the server user interface code see [here](server.html)
+
 
 
 ***Install***
@@ -24,6 +28,7 @@ The server daemon is available is a go src file which can be installed with the 
 $ go install main.go
 ```
  
+
 ***Dependencies***
 
 * [bytes](https://golang.org/pkg/bytes/) - go package for byte manipulation
@@ -41,7 +46,7 @@ $ go install main.go
 * [log](https://golang.org/pkg/log/) - error logging
 * [net/http](https://golang.org/pkg/net/http/)- http requests
 
- 
+
 ***IPFS Dependency***
 
 The server requires an ipfs server to be listening for API calls. Whisper relies on the go-ipfs-api standard release, to handle file hashing.
@@ -64,7 +69,6 @@ Gateway (readonly) server listening on /ip4/127.0.0.1/tcp/8080
 Daemon is ready
 ```
 
- 
 ***Usage***
 
 After installation, the command to start the server quite simply is "server":
@@ -83,6 +87,7 @@ The WebUI provides the following functionality:
 * [http://localhost:9090/sell](http://localhost:9090/sell) - Locate files, encrypt, release hash.
 
  
+
 
 ***Options***
 
