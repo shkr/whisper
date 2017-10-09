@@ -1,0 +1,330 @@
+<!doctype>
+<html>
+
+<head>
+    <title>Whisper Application</title>
+    <link rel="stylesheet" type="text/css" href="../style/style.css" />
+    <script type="text/javascript" src="../js/web3.min.js"></script>
+    <script type="text/javascript" src="../js/ipfs.js"></script>
+    <script type="text/javascript" src="../js/jsencrypt.js"></script>
+    <script type="text/javascript">
+
+    /* create application namespace */
+    let App = {}
+    App.conf = {}
+
+    /* configuration initialization */
+    App.conf.web3Host;
+    App.conf.web3Port;
+    App.conf.ipfsHost;
+    App.conf.ipfsAPIPort;
+    App.conf.ipfsTCPPort;
+    App.conf.whisperBuyUrl;    
+    
+    /* whisper intialization */
+    App.publicKey;
+    App.privateKey;
+    App.fileReceived = {};
+    App.crypto = new JSEncrypt();
+    
+    /* ipfs initialization */
+    let ipfs;
+    App.ipfs = ipfs;
+
+    /* web3 initialization */
+    let Web3 = require('web3');
+    App.web3 = new Web3();
+    
+    /* HTML Tables */
+    /* 1 configuration html table */
+    App.html = new Object();
+    App.html.tableRowInsertOrReplace = new Object()
+
+    App.html.appConfigurationTable = 'AppConfigurationTable';
+    App.html.htmlConfData = new Object();
+    App.html.htmlConfRowID = -1;
+    App.html.tableRowInsertOrReplace[App.html.appConfigurationTable] = function (key, value) {
+        if(!App.html.htmlConfData.hasOwnProperty(key)) {
+            App.html.htmlConfRowID += 1;
+            App.html.htmlConfData[key] = App.html.htmlConfRowID;
+            let htmlTable = document.getElementById(App.html.appConfigurationTable)
+            row = htmlTable.insertRow(App.html.htmlConfData[key]);
+            row.insertCell(0).innerHTML = key;
+            row.insertCell(1).innerHTML = value;
+        } else {
+            let htmlTable = document.getElementById(App.html.appConfigurationTable)
+            let row = htmlTable.rows[App.html.htmlConfData[key]]
+            row.cells[0].innerHTML = key;
+            row.cells[1].innerHTML = value;
+        }
+    }
+
+    /* 2 files bought html table */
+    App.html.inventoryTable = 'InventoryTable';
+    App.html.htmlInventoryData = new Object();
+    App.html.htmlInventoryRowID = -1;
+    App.html.tableRowInsertOrReplace[App.html.inventoryTable] = function (key, value) {
+        if(!App.html.htmlInventoryData.hasOwnProperty(key)) {
+            App.html.htmlInventoryRowID += 1;
+            App.html.htmlInventoryData[key] = App.html.htmlInventoryRowID
+            let htmlTable = document.getElementById(App.html.inventoryTable)
+            row = htmlTable.insertRow(App.html.htmlInventoryData[key]);
+            row.insertCell(0).innerHTML = key;
+            row.insertCell(1).innerHTML = value;
+        } else {
+            let htmlTable = document.getElementById(App.html.inventoryTable)
+            let row = htmlTable.rows[App.html.htmlInventoryRowID]
+            row.cells[0].innerHTML = key;
+            row.cells[1].innerHTML = value;
+        }
+    };
+        
+    /**
+     * Check for the File API support.
+     */
+    function checkFileAPI() {
+        if (window.File && window.FileReader && window.FileList && window.Blob) {
+            reader = new FileReader();
+            return true; 
+        } else {
+            alert('The File APIs are not fully supported by your browser. Fallback required.');
+            return false;
+        }
+    }
+
+    /**
+     * read text input
+     */
+    function readText(filePath, callback) {
+        let reader = new FileReader();
+        if(!checkFileAPI()) {
+            alert('file api not available, open app on chrome!');
+        }
+
+        if(filePath.files && filePath.files[0]) {           
+            reader.onload = function (e) {
+                output = e.target.result;
+                callback(output);
+            };//end onload()
+            reader.readAsText(filePath.files[0]);
+        }
+    }
+
+
+    /**
+     * load SmartContract
+     */
+    function deploySmartContract(filePath) {
+        readText(filePath, function load(txt) { 
+            if (App.publicKey==null) {
+                alert("load public key before deploying contract");
+            }
+            let data = JSON.parse(txt);
+            App.contractData = data;
+            App.Contract = App.web3.eth.contract(App.contractData.abi);
+            contractCons = {
+                "from": App.web3.eth.accounts[0], 
+                "data": App.contractData.unlinked_binary, 
+                "gas": 3000000, 
+                value: 1e19
+            };
+            App.Contract.new(App.publicKey, "example.txt", 1e18, 2, contractCons, function (err, contract) {
+                if (err) {
+                    console.error("Contract deployment error: ", err);
+                } else if (contract.address) {
+                    App.contractAddress = contract.address;
+                    App.contractInstance = App.Contract.at(contract.address);
+                    App.html.tableRowInsertOrReplace[App.html.appConfigurationTable]('Contract Address', contract.address);
+                    console.log("Contract successfully deployed at: ", contract.address);
+                } else if (contract.transactionHash) {
+                    console.log("Awaiting contract deployment with transaction hash: ", contract.transactionHash);
+                } else {
+                    console.error("Unresolved contract deployment error");
+                }
+            });
+
+            setInterval(function(){
+            App.html.tableRowInsertOrReplace[App.html.appConfigurationTable]('Contract Quota', App.contractInstance.quota().toString());
+            }, 1000);
+
+            setInterval(function(){
+            App.html.tableRowInsertOrReplace[App.html.appConfigurationTable]('Files Received', App.contractInstance.totalItems().toString());
+            }, 1000);
+
+            setInterval(function(){
+            App.html.tableRowInsertOrReplace[App.html.appConfigurationTable]('Total Sellers', App.contractInstance.totalSellers().toString());
+            }, 1000);
+
+            setInterval(function(){
+            App.html.tableRowInsertOrReplace[App.html.appConfigurationTable]('Fulfilled', App.contractInstance.totalItems().toString()==App.contractInstance.quota().toString());
+            }, 1000);
+
+
+            setInterval(function(){
+                let value = null;
+                if(App.contractInstance.totalItems().toString()==App.contractInstance.quota().toString() && !App.contractInstance.done()) {
+                    value = '<input type = "button" value = "close" onclick = "closeCurrentContract()"/>';    
+                } else if(!App.contractInstance.done()) {
+                    value = '<input type = "button" value = "close" disabled/>';
+                } else {
+                    value = '<input type = "button" value = "closed" disabled/>';
+                }
+                
+                App.html.tableRowInsertOrReplace[App.html.appConfigurationTable]('|close|', value);
+            }, 1000);
+
+            setInterval(function(){
+                let value = null;
+                if(!App.contractInstance.done()) {
+                    value = '<input type = "button" value = "terminate" onclick = "terminateCurrentContract()"/>';
+                } else {
+                    value = '<input type = "button" value = "terminated" disabled/>';
+                }
+                App.html.tableRowInsertOrReplace[App.html.appConfigurationTable]('|terminate|', value);
+            }, 1000);
+        });
+    }
+
+
+    function closeCurrentContract() {
+        hyperMessage = {
+            "from": App.web3.eth.accounts[0], 
+            "gas": 3000000
+        };
+        App.contractInstance.finish(hyperMessage);
+        console.log('Contract Finished');
+
+        for (i = 0; i < App.contractInstance.totalItems(); i++) { 
+            let value = App.contractInstance.accessItem(i);
+            let ipfsAddr = 'https://localhost:' + App.conf.ipfsTCPPort + '/ipfs/' + App.crypto.decrypt(value)
+            App.html.tableRowInsertOrReplace[App.html.inventoryTable](i, ipfsAddr.link(ipfsAddr));
+        }
+    };
+
+    function terminateCurrentContract() {
+        hyperMessage = {
+            "from": App.web3.eth.accounts[0], 
+            "gas": 3000000
+        };
+        App.contractInstance.destroy(hyperMessage);
+        console.log('Contract Destroyed');
+    };
+    
+
+    /**
+     * set App.config
+     */
+    function setAppConfig(filePath) {
+        readText(filePath, function load(txt) { 
+            
+            let data = JSON.parse(txt)
+            
+            App.conf.web3Host = data.web3.host; // 'http://localhost';
+            App.conf.web3Port = data.web3.port; // '8545';
+            App.conf.ipfsHost = data.ipfs.host;
+            App.conf.ipfsAPIPort = data.ipfs.api_port;
+            App.conf.ipfsTCPPort = data.ipfs.tcp_port;
+            App.conf.whisperBuyUrl = data.whisper.buy_url;
+            
+            App.web3.setProvider(new App.web3.providers.HttpProvider(App.conf.web3Host + ':' + App.conf.web3Port));
+            if (!App.web3.isConnected()) {
+                console.error("Ethereum - no connection to RPC server");
+            } else {
+                console.log("Ethereum - connected to RPC server");
+            }
+            App.account = App.web3.eth.accounts[0];
+
+            /* IPFS initialization */
+            App.ipfs = IpfsApi(App.conf.ipfsHost, App.conf.ipfsAPIPort)
+            
+            let key1 = 'Ethereum Provider';
+            let value1 = App.conf.web3Host + ':' + App.conf.web3Port;
+            App.html.tableRowInsertOrReplace[App.html.appConfigurationTable](key1, value1);
+            
+
+            let key2 = 'IPFS Node'
+            let value2 = App.conf.ipfsHost + ':' + App.conf.ipfsAPIPort
+            App.html.tableRowInsertOrReplace[App.html.appConfigurationTable](key2, value2);
+        });
+    }
+  
+    function displayHTML(eid, data) {
+        document.getElementById(eid).innerText = data;
+    }
+    
+    /**
+     * set App.privateKey
+     */
+    function setPrivateKey(filePath) {
+        readText(filePath, function setKeys(data) { 
+            App.privateKey = data;
+            App.crypto.setPrivateKey(App.privateKey);
+            App.html.tableRowInsertOrReplace[App.html.appConfigurationTable]('Private Key', '(valid)');
+        });        
+    }
+
+    /**
+     * set App.publicKey
+     */
+    function setPublicKey(filePath) {
+        readText(filePath, function setKeys(data) { 
+            App.publicKey = data;
+            App.crypto.setPublicKey(App.publicKey);
+            App.html.tableRowInsertOrReplace[App.html.appConfigurationTable]('Public Key', '(valid)');
+        });        
+    }
+    
+/**
+      * Check the balance in the current eth account
+      **/
+    function ethereumStatus() {
+        let status = {}
+        status.balance = getBalance()
+        status.gasprice = App.web3.eth.gasPrice
+        return status
+    }
+
+    /**
+      * Check the balance in the current eth account
+      **/
+    function whisperStatus() {
+        let status = {}
+        status.filesReceived = App.fileReceived
+        status.filesSent = App.fileSent
+        return status
+    }
+
+
+    /**
+      * Check the balance in the current eth account
+      **/
+    function getBalance() {
+        // Print balance in all the accounts
+        App.web3.eth.getBalance(App.account, function (err, balance) {
+            return parseFloat(App.web3.fromWei(balance, "ether"));
+        });
+    }
+    </script>
+</head>
+
+<body>
+    <br/>
+    <h2>Whisper Client</h2>
+    <fieldset>
+        <strong>App configuration</strong>: 
+        <input type="file" name="appConfig" onchange='setAppConfig(this)' />
+        <strong>Public Key</strong>: 
+        <input type="file" name="publicKey" onchange='setPublicKey(this)' />
+        <strong>Private Key</strong>: 
+        <input type="file" name="privateKey" onchange='setPrivateKey(this)' />
+        <strong>Smart Contract</strong>: 
+        <input type="file" name="contract" onchange='deploySmartContract(this)' />
+        
+    <table id="AppConfigurationTable"></table>
+    <table id="ContractStatusTable"></table>
+    <br>
+    <br>
+    <h2>Whispers Fulfilled</h2>
+    <table id="InventoryTable"></table>
+    </fieldset>
+</body>

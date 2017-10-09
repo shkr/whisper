@@ -1,0 +1,10 @@
+init_wallet=100000000000000000000
+init_wallet_in_eth=100
+buyerAccount="--account=0x446f1895153427c000e4931676aefa1334014ad95551a18a911dcf29b5d87636,$init_wallet"
+sellerAccount="--account=0x70d0aab31afd963beae47e23d2055a4328d3c8cde327fe901ea31767a0f1002b,$init_wallet"
+
+
+echo "init: Buyer Account $buyerAccount loaded with $init_wallet_in_eth eth"
+echo "init: Seller Account $sellerAccount loaded with $init_wallet_in_eth eth"
+
+testrpc $buyerAccount $sellerAccount

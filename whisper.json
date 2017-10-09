@@ -1,0 +1,15 @@
+{
+	"web3": {
+		"host": "http://127.0.0.1",
+		"port": 8545
+	},
+	"ipfs": {
+		"host": "127.0.0.1",
+		"api_port": 5001,
+		"tcp_port": 8080
+	},
+	"whisper": {
+		"store": "http://127.0.0.1:9090/store",
+		"list": "http://127.0.0.1:9090/list"
+	}
+}
